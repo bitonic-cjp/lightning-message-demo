@@ -9,6 +9,30 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from lightningd import lightning, plugin
 
 
+def serializeBigsize(n):
+	if n < 0xfd:
+		return struct.pack('B', n)
+	elif n < 0x10000:
+		return b'\xfd' + struct.pack('>H', n)
+	elif n < 0x100000000:
+		return b'\xfe' + struct.pack('>I', n)
+	else:
+		return b'\xff' + struct.pack('>Q', n)
+
+
+def serializeTLVPayload(TLVData):
+	keys = list(TLVData.keys())
+	keys.sort()
+	hop_payload = b''
+	for k in keys:
+		T = serializeBigsize(k)
+		V = TLVData[k]
+		L = serializeBigsize(len(V))
+		hop_payload += T + L + V
+	hop_payload_length = serializeBigsize(len(hop_payload))
+	return hop_payload_length + hop_payload
+
+
 def serializeStandardPayload(route_data, plugin):
 	style = route_data['style']
 	if style == 'legacy':
@@ -36,19 +60,23 @@ def serializeStandardPayload(route_data, plugin):
 	raise Exception('Style not supported: ' + style)
 
 
+def serializeCustomPayload(T, message):
+	return serializeTLVPayload({T: message.encode('utf-8')})
+
+
 p = plugin.Plugin()
 
 
 @p.method('sendmessage')
 def sendMessage(destination, msatoshi, message, plugin=None):
-	route = plugin.rpc.getroute(destination, msatoshi, 10)
-	#return route
-	return serializeStandardPayload({
-		'channel': '103x1x1',
-		'msatoshi': 1001,
-		'delay': 15,
-		'style': 'legacy',
-		}, plugin).hex()
+	route = plugin.rpc.getroute(destination, msatoshi, 10)['route']
+
+	payloads = [serializeStandardPayload(hop) for hop in route[1:]]
+	customPayload = serializeCustomPayload(254, message)
+	payloads.append(customPayload)
+
+	payloads = [hop.hex() for hop in payloads]
+	return payloads
 
 
 p.run()
