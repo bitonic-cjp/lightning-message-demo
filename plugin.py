@@ -4,6 +4,7 @@ import hashlib
 import os
 import struct
 import sys
+import traceback
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -112,15 +113,19 @@ transactions = {}
 
 @p.hook("htlc_accepted")
 def on_htlc_accepted(onion, htlc, plugin, **kwargs):
+	plugin.log('> on_htlc_accepted')
 	try:
 		payment_hash = bytes.fromhex(htlc['payment_hash'])
 		tx = transactions[payment_hash]
 		tx['message'] = onion['payload']
 		tx['amount'] = htlc['amount']
-		return {'result': 'resolve', 'payment_key' = tx['preimage']}
+		plugin.log('< on_htlc_accepted: resolve')
+		return {'result': 'resolve', 'payment_key': tx['preimage']}
 	except:
-		#TODO: log the exception
-		pass
+		plugin.log('  exception in on_htlc_accepted:')
+		plugin.log(traceback.format_exc())
+
+	plugin.log('< on_htlc_accepted: continue')
 	return {'result': 'continue'}
 
 
@@ -128,7 +133,7 @@ def on_htlc_accepted(onion, htlc, plugin, **kwargs):
 def receivemessage_new():
 	paymentPreimage = os.urandom(32)
 	paymentHash = sha256(paymentPreimage)
-	transactions[paymentHash] = {'preimage': paymentPreimage}
+	transactions[paymentHash] = {'preimage': paymentPreimage.hex()}
 	return paymentHash.hex()
 
 
@@ -138,8 +143,7 @@ def receivemessage_poll(payment_hash):
 	tx = transactions[payment_hash]
 	if 'message' in tx:
 		return tx
-	except KeyError:
-		return None
+	return None
 
 
 p.run()

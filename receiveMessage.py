@@ -20,3 +20,5 @@ while True:
 		break
 	time.sleep(0.1)
 
+print(message)
+
