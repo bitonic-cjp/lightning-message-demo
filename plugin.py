@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import hashlib
 import os
 import struct
 import sys
@@ -7,6 +8,12 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from lightningd import lightning, plugin
+
+sha256 = lambda preimage: hashlib.sha256(preimage).digest()
+
+
+MESSAGE_TLV_TYPE = 254
+
 
 
 def serializeBigsize(n):
@@ -60,8 +67,8 @@ def serializeStandardPayload(route_data, plugin):
 	raise Exception('Style not supported: ' + style)
 
 
-def serializeCustomPayload(T, message):
-	return serializeTLVPayload({T: message.encode('utf-8')})
+def serializeCustomPayload(message):
+	return serializeTLVPayload({MESSAGE_TLV_TYPE: message.encode('utf-8')})
 
 
 p = plugin.Plugin()
@@ -72,7 +79,7 @@ def sendMessage(destination, payment_hash, msatoshi, message, plugin=None):
 	route = plugin.rpc.getroute(destination, msatoshi, 10)['route']
 
 	payloads = [serializeStandardPayload(hop) for hop in route[1:]]
-	customPayload = serializeCustomPayload(254, message)
+	customPayload = serializeCustomPayload(message)
 	payloads.append(customPayload)
 
 	hops = \
@@ -97,6 +104,23 @@ def sendMessage(destination, payment_hash, msatoshi, message, plugin=None):
 	waitOutput = plugin.rpc.waitsendpay(payment_hash)
 
 	return {'send': sendOutput, 'wait': waitOutput}
+
+
+
+transactions = {}
+
+
+@p.hook("htlc_accepted")
+def on_htlc_accepted(onion, htlc, plugin, **kwargs):
+    return {'result': 'continue'}
+
+
+@p.method('receivemessage_new')
+def receivemessage_new():
+	paymentPreimage = os.urandom(32)
+	paymentHash = sha256(paymentPreimage)
+	transactions[paymentHash] = {'preimage': paymentPreimage, 'status': 'new'}
+	return paymentHash.hex()
 
 
 
