@@ -68,15 +68,21 @@ p = plugin.Plugin()
 
 
 @p.method('sendmessage')
-def sendMessage(destination, msatoshi, message, plugin=None):
+def sendMessage(destination, payment_hash, msatoshi, message, plugin=None):
 	route = plugin.rpc.getroute(destination, msatoshi, 10)['route']
 
 	payloads = [serializeStandardPayload(hop) for hop in route[1:]]
 	customPayload = serializeCustomPayload(254, message)
 	payloads.append(customPayload)
 
-	payloads = [hop.hex() for hop in payloads]
-	return payloads
+	hops = \
+	[
+	{'pubkey': r['id'], 'payload': pl.hex()}
+	for r, pl in zip(route, payloads)
+	]
+
+	return plugin.rpc.createonion(hops, payment_hash)
+
 
 
 p.run()
