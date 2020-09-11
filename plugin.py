@@ -81,7 +81,22 @@ def sendMessage(destination, payment_hash, msatoshi, message, plugin=None):
 	for r, pl in zip(route, payloads)
 	]
 
-	return plugin.rpc.createonion(hops, payment_hash)
+	ret = plugin.rpc.createonion(hops, payment_hash)
+	onion = ret['onion']
+	shared_secrets = ret['shared_secrets']
+
+	sendOutput = plugin.rpc.sendonion(
+		onion=onion,
+		first_hop=route[0],
+		payment_hash=payment_hash,
+		label='sendmessage payment',
+		shared_secrets=shared_secrets,
+		msatoshi=msatoshi,
+		)
+
+	waitOutput = plugin.rpc.waitsendpay(payment_hash)
+
+	return {'send': sendOutput, 'wait': waitOutput}
 
 
 
