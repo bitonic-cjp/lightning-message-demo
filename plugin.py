@@ -112,16 +112,34 @@ transactions = {}
 
 @p.hook("htlc_accepted")
 def on_htlc_accepted(onion, htlc, plugin, **kwargs):
-    return {'result': 'continue'}
+	try:
+		payment_hash = bytes.fromhex(htlc['payment_hash'])
+		tx = transactions[payment_hash]
+		tx['message'] = onion['payload']
+		tx['amount'] = htlc['amount']
+		return {'result': 'resolve', 'payment_key' = tx['preimage']}
+	except:
+		#TODO: log the exception
+		pass
+	return {'result': 'continue'}
 
 
 @p.method('receivemessage_new')
 def receivemessage_new():
 	paymentPreimage = os.urandom(32)
 	paymentHash = sha256(paymentPreimage)
-	transactions[paymentHash] = {'preimage': paymentPreimage, 'status': 'new'}
+	transactions[paymentHash] = {'preimage': paymentPreimage}
 	return paymentHash.hex()
 
+
+@p.method('receivemessage_poll')
+def receivemessage_poll(payment_hash):
+	payment_hash = bytes.fromhex(payment_hash)
+	tx = transactions[payment_hash]
+	if 'message' in tx:
+		return tx
+	except KeyError:
+		return None
 
 
 p.run()
