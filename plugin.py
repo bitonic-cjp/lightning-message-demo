@@ -28,6 +28,19 @@ def serializeBigsize(n):
 		return b'\xff' + struct.pack('>Q', n)
 
 
+def deserializeBigsize(data):
+	first = data[0]
+	data = data[1:]
+	if first == 0xff:
+		return struct.unpack('>Q', data[:8])[0], data[8:]
+	elif first == 0xfe:
+		return struct.unpack('>I', data[:4])[0], data[4:]
+	elif first == 0xfd:
+		return struct.unpack('>H', data[:2])[0], data[2:]
+	else:
+		return first, data
+
+
 def serializeTLVPayload(TLVData):
 	keys = list(TLVData.keys())
 	keys.sort()
@@ -39,6 +52,21 @@ def serializeTLVPayload(TLVData):
 		hop_payload += T + L + V
 	hop_payload_length = serializeBigsize(len(hop_payload))
 	return hop_payload_length + hop_payload
+
+
+def deserializeTLVPayload(TLVData):
+	hop_payload_length, data = deserializeBigsize(TLVData)
+	assert hop_payload_length != 0
+	assert hop_payload_length == len(data)
+	ret = {}
+	while data:
+		T, data = deserializeBigsize(data)
+		L, data = deserializeBigsize(data)
+		assert L <= len(data)
+		V = data[:L]
+		data = data[L:]
+		ret[T] = V
+	return ret
 
 
 def serializeStandardPayload(route_data, plugin):
@@ -115,12 +143,20 @@ transactions = {}
 def on_htlc_accepted(onion, htlc, plugin, **kwargs):
 	plugin.log('> on_htlc_accepted')
 	try:
+		payload = bytes.fromhex(onion['payload'])
+		TLVData = deserializeTLVPayload(payload)
+		assert list(TLVData.keys()) == [MESSAGE_TLV_TYPE]
+		message = TLVData[MESSAGE_TLV_TYPE].decode('utf-8')
 		payment_hash = bytes.fromhex(htlc['payment_hash'])
 		tx = transactions[payment_hash]
-		tx['message'] = onion['payload']
+		preimage = tx['preimage']
+
+		del tx['preimage']
 		tx['amount'] = htlc['amount']
+		tx['message'] = message
+
 		plugin.log('< on_htlc_accepted: resolve')
-		return {'result': 'resolve', 'payment_key': tx['preimage']}
+		return {'result': 'resolve', 'payment_key': preimage}
 	except:
 		plugin.log('  exception in on_htlc_accepted:')
 		plugin.log(traceback.format_exc())
