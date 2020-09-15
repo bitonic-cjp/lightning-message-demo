@@ -5,18 +5,20 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import config
 from lightningd import lightning
 
-rpc = lightning.LightningRpc('/home/corne/lightning-network/node0/testnet/node0.rpc')
+rpc = lightning.LightningRpc(config.sendNodeRPCFile)
 
 payment_hash = input('Payment hash? ')
+msatoshi = int(input ('Amount (msatoshi)? '))
 message = input('Message? ')
 
 ret = rpc.call('sendmessage',
 	{
-	'destination': '033b83e1f29b0b73633258f27e9c4d97f37cc8a5b84e2a2d8fdd1b5bb43b5db3e0',
+	'destination': config.receiveNodeID,
 	'payment_hash': payment_hash,
-	'msatoshi': 1000,
+	'msatoshi': msatoshi,
 	'message': message,
 	})
 

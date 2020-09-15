@@ -6,9 +6,10 @@ import time
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import config
 from lightningd import lightning
 
-rpc = lightning.LightningRpc('/home/corne/lightning-network/node2/testnet/node2.rpc')
+rpc = lightning.LightningRpc(config.receiveNodeRPCFile)
 
 payment_hash = rpc.call('receivemessage_new')
 
